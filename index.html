@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>LocalDrop — WiFi File Share</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0a0b;
+    --surface: #111114;
+    --card: #16161b;
+    --border: #2a2a35;
+    --accent: #00e5a0;
+    --accent2: #ff5c5c;
+    --accent3: #f0c040;
+    --text: #e8e8f0;
+    --muted: #666680;
+    --font-mono: 'Space Mono', monospace;
+    --font-display: 'Syne', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-mono);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Grid noise texture */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,229,160,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,160,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    position: relative;
+    z-index: 1;
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 32px 20px 60px;
+  }
+
+  /* Header */
+  header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    margin-bottom: 36px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .logo {
+    font-family: var(--font-display);
+    font-size: 2rem;
+    font-weight: 800;
+    letter-spacing: -1px;
+  }
+
+  .logo span {
+    color: var(--accent);
+  }
+
+  .logo-sub {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    color: var(--muted);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-top: 2px;
+  }
+
+  .status-dot {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.7rem;
+    color: var(--accent);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  .dot {
+    width: 8px; height: 8px;
+    background: var(--accent);
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+    box-shadow: 0 0 8px var(--accent);
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.8); }
+  }
+
+  /* Network info panel */
+  .net-panel {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 16px;
+    margin-bottom: 28px;
+    align-items: start;
+  }
+
+  .net-info {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 24px;
+  }
+
+  .net-label {
+    font-size: 0.6rem;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+
+  .net-url {
+    font-size: 1.1rem;
+    color: var(--accent);
+    word-break: break-all;
+    margin-bottom: 12px;
+    font-weight: 700;
+  }
+
+  .copy-btn {
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .copy-btn:hover { background: var(--accent); color: var(--bg); }
+  .copy-btn.copied { background: var(--accent); color: var(--bg); }
+
+  .qr-box {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .qr-box canvas {
+    border-radius: 6px;
+  }
+
+  .qr-label {
+    font-size: 0.6rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  /* Drop zone */
+  .drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: 14px;
+    padding: 48px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.25s;
+    background: var(--card);
+    margin-bottom: 28px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .drop-zone::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at center, rgba(0,229,160,0.04) 0%, transparent 70%);
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .drop-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(0,229,160,0.04);
+  }
+
+  .drop-zone.drag-over::after { opacity: 1; }
+
+  .drop-icon {
+    font-size: 2.5rem;
+    margin-bottom: 14px;
+    display: block;
+    transition: transform 0.3s;
+  }
+
+  .drop-zone:hover .drop-icon,
+  .drop-zone.drag-over .drop-icon { transform: translateY(-6px); }
+
+  .drop-title {
+    font-family: var(--font-display);
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+
+  .drop-sub {
+    font-size: 0.7rem;
+    color: var(--muted);
+    letter-spacing: 1px;
+  }
+
+  .file-input { display: none; }
+
+  /* Upload progress */
+  .upload-progress {
+    display: none;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-bottom: 20px;
+    font-size: 0.75rem;
+    color: var(--accent);
+    letter-spacing: 1px;
+  }
+
+  .progress-bar-wrap {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    margin-top: 10px;
+    overflow: hidden;
+  }
+
+  .progress-bar {
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+    transition: width 0.3s;
+    border-radius: 2px;
+    box-shadow: 0 0 8px var(--accent);
+  }
+
+  /* Files section */
+  .files-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+
+  .section-label {
+    font-size: 0.65rem;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .file-count {
+    font-size: 0.65rem;
+    letter-spacing: 2px;
+    color: var(--accent);
+  }
+
+  /* File list */
+  .file-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .file-item {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 18px;
+    display: grid;
+    grid-template-columns: 36px 1fr auto;
+    align-items: center;
+    gap: 14px;
+    animation: slideIn 0.3s ease;
+    transition: border-color 0.2s;
+  }
+
+  .file-item:hover { border-color: var(--accent); }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(-8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .file-icon {
+    width: 36px; height: 36px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .file-details { min-width: 0; }
+
+  .file-name {
+    font-size: 0.8rem;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 3px;
+  }
+
+  .file-meta {
+    font-size: 0.65rem;
+    color: var(--muted);
+    letter-spacing: 1px;
+  }
+
+  .file-actions {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .btn-dl {
+    background: var(--accent);
+    color: var(--bg);
+    border: none;
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    padding: 7px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .btn-dl:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(0,229,160,0.3); }
+
+  .btn-del {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    padding: 7px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn-del:hover { border-color: var(--accent2); color: var(--accent2); }
+
+  /* Empty state */
+  .empty {
+    text-align: center;
+    padding: 48px;
+    color: var(--muted);
+    font-size: 0.75rem;
+    letter-spacing: 2px;
+    border: 1px dashed var(--border);
+    border-radius: 12px;
+  }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--card);
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding: 12px 24px;
+    border-radius: 40px;
+    z-index: 999;
+    transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
+    white-space: nowrap;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  /* Responsive */
+  @media (max-width: 580px) {
+    .net-panel { grid-template-columns: 1fr; }
+    .qr-box { flex-direction: row; }
+    .file-item { grid-template-columns: 30px 1fr; }
+    .file-actions { grid-column: 1 / -1; }
+    header { flex-direction: column; align-items: flex-start; gap: 10px; }
+    .logo { font-size: 1.5rem; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <header>
+    <div>
+      <div class="logo">Local<span>Drop</span></div>
+      <div class="logo-sub">WiFi File Transfer</div>
+    </div>
+    <div class="status-dot">
+      <div class="dot"></div> Server Active
+    </div>
+  </header>
+
+  <!-- Network info + QR -->
+  <div class="net-panel">
+    <div class="net-info">
+      <div class="net-label">Share this link on your WiFi network</div>
+      <div class="net-url" id="netUrl">Loading...</div>
+      <button class="copy-btn" id="copyBtn" onclick="copyUrl()">⎘ Copy Link</button>
+    </div>
+    <div class="qr-box">
+      <canvas id="qrCanvas"></canvas>
+      <div class="qr-label">Scan to open</div>
+    </div>
+  </div>
+
+  <!-- Drop zone -->
+  <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+    <input type="file" id="fileInput" class="file-input" multiple onchange="uploadFiles(this.files)">
+    <span class="drop-icon">📂</span>
+    <div class="drop-title">Drop files here or click to browse</div>
+    <div class="drop-sub">Any file type · Multiple files supported</div>
+  </div>
+
+  <!-- Upload progress -->
+  <div class="upload-progress" id="uploadProgress">
+    <span id="progressText">Uploading...</span>
+    <div class="progress-bar-wrap">
+      <div class="progress-bar" id="progressBar"></div>
+    </div>
+  </div>
+
+  <!-- Files -->
+  <div class="files-header">
+    <div class="section-label">Shared Files</div>
+    <div class="file-count" id="fileCount"></div>
+  </div>
+  <div class="file-list" id="fileList">
+    <div class="empty">No files yet — drop something above</div>
+  </div>
+
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+  let serverUrl = '';
+
+  // Fetch server IP and generate QR
+  async function initNetwork() {
+    try {
+      const res = await fetch('/api/ip');
+      const { ip, port } = await res.json();
+      serverUrl = `http://${ip}:${port}`;
+      document.getElementById('netUrl').textContent = serverUrl;
+      QRCode.toCanvas(document.getElementById('qrCanvas'), serverUrl, {
+        width: 100,
+        margin: 1,
+        color: { dark: '#00e5a0', light: '#16161b' }
+      });
+    } catch {
+      document.getElementById('netUrl').textContent = 'Start the server first (node server.js)';
+    }
+  }
+
+  function copyUrl() {
+    if (!serverUrl) return;
+    navigator.clipboard.writeText(serverUrl).then(() => {
+      const btn = document.getElementById('copyBtn');
+      btn.textContent = '✓ Copied!';
+      btn.classList.add('copied');
+      setTimeout(() => {
+        btn.textContent = '⎘ Copy Link';
+        btn.classList.remove('copied');
+      }, 2000);
+    });
+  }
+
+  // Drag & Drop
+  const dropZone = document.getElementById('dropZone');
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    uploadFiles(e.dataTransfer.files);
+  });
+
+  // Upload
+  async function uploadFiles(files) {
+    if (!files.length) return;
+    const progressEl = document.getElementById('uploadProgress');
+    const progressBar = document.getElementById('progressBar');
+    const progressText = document.getElementById('progressText');
+
+    progressEl.style.display = 'block';
+    progressText.textContent = `Uploading ${files.length} file(s)...`;
+    progressBar.style.width = '10%';
+
+    const formData = new FormData();
+    for (const f of files) formData.append('files', f);
+
+    try {
+      // Animate bar
+      let p = 10;
+      const timer = setInterval(() => {
+        p = Math.min(p + Math.random() * 15, 85);
+        progressBar.style.width = p + '%';
+      }, 200);
+
+      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      clearInterval(timer);
+      progressBar.style.width = '100%';
+
+      if (res.ok) {
+        showToast(`✓ ${files.length} file(s) uploaded`);
+        loadFiles();
+      } else {
+        showToast('Upload failed', true);
+      }
+    } catch {
+      showToast('Cannot reach server', true);
+    }
+
+    setTimeout(() => {
+      progressEl.style.display = 'none';
+      progressBar.style.width = '0%';
+    }, 800);
+  }
+
+  // File icons
+  function getIcon(name) {
+    const ext = name.split('.').pop().toLowerCase();
+    const map = {
+      pdf: '📄', png: '🖼️', jpg: '🖼️', jpeg: '🖼️', gif: '🖼️', webp: '🖼️', svg: '🖼️',
+      mp4: '🎬', mov: '🎬', avi: '🎬', mkv: '🎬',
+      mp3: '🎵', wav: '🎵', flac: '🎵', aac: '🎵',
+      zip: '🗜️', rar: '🗜️', tar: '🗜️', gz: '🗜️',
+      doc: '📝', docx: '📝', txt: '📝',
+      xls: '📊', xlsx: '📊', csv: '📊',
+      ppt: '📑', pptx: '📑',
+      js: '💻', ts: '💻', html: '💻', css: '💻', py: '💻', json: '💻',
+      apk: '📱', ipa: '📱',
+    };
+    return map[ext] || '📁';
+  }
+
+  function formatSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1048576).toFixed(1) + ' MB';
+  }
+
+  function timeAgo(dateStr) {
+    const diff = (Date.now() - new Date(dateStr)) / 1000;
+    if (diff < 60) return 'just now';
+    if (diff < 3600) return Math.floor(diff/60) + 'm ago';
+    if (diff < 86400) return Math.floor(diff/3600) + 'h ago';
+    return Math.floor(diff/86400) + 'd ago';
+  }
+
+  // Load files
+  async function loadFiles() {
+    try {
+      const res = await fetch('/api/files');
+      const files = await res.json();
+      const list = document.getElementById('fileList');
+      const countEl = document.getElementById('fileCount');
+
+      countEl.textContent = files.length ? `${files.length} file${files.length > 1 ? 's' : ''}` : '';
+
+      if (!files.length) {
+        list.innerHTML = '<div class="empty">No files yet — drop something above</div>';
+        return;
+      }
+
+      list.innerHTML = files.map(f => `
+        <div class="file-item">
+          <div class="file-icon">${getIcon(f.originalName)}</div>
+          <div class="file-details">
+            <div class="file-name">${f.originalName}</div>
+            <div class="file-meta">${formatSize(f.size)} · ${timeAgo(f.uploaded)}</div>
+          </div>
+          <div class="file-actions">
+            <a class="btn-dl" href="/api/download/${encodeURIComponent(f.storedName)}" download>
+              ↓ Download
+            </a>
+            <button class="btn-del" onclick="deleteFile('${f.storedName}')">✕</button>
+          </div>
+        </div>
+      `).join('');
+    } catch {
+      // server not running
+    }
+  }
+
+  // Delete
+  async function deleteFile(name) {
+    await fetch(`/api/delete/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    showToast('File removed');
+    loadFiles();
+  }
+
+  // Toast
+  function showToast(msg, error = false) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.style.borderColor = error ? 'var(--accent2)' : 'var(--accent)';
+    t.style.color = error ? 'var(--accent2)' : 'var(--accent)';
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2500);
+  }
+
+  // Init
+  initNetwork();
+  loadFiles();
+  setInterval(loadFiles, 4000); // Poll every 4s
+</script>
+</body>
+</html>
