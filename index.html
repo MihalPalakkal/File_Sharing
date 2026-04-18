@@ -6,7 +6,6 @@
 <title>LocalDrop — WiFi File Share</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 <style>
   :root {
     --bg: #0a0a0b;
@@ -158,15 +157,17 @@
     background: var(--card);
     border: 1px solid var(--border);
     border-radius: 12px;
-    padding: 16px;
+    padding: 20px;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
+    min-width: 200px;
   }
 
   .qr-box canvas {
-    border-radius: 6px;
+    border-radius: 8px;
+    display: block;
   }
 
   .qr-label {
@@ -174,6 +175,13 @@
     letter-spacing: 2px;
     text-transform: uppercase;
     color: var(--muted);
+  }
+
+  .qr-error {
+    font-size: 0.6rem;
+    color: var(--accent2);
+    text-align: center;
+    letter-spacing: 1px;
   }
 
   /* Drop zone */
@@ -444,7 +452,7 @@
       <button class="copy-btn" id="copyBtn" onclick="copyUrl()">⎘ Copy Link</button>
     </div>
     <div class="qr-box">
-      <canvas id="qrCanvas"></canvas>
+      <img id="qrImg" src="/api/qr" alt="QR Code" style="width:160px;height:160px;border-radius:8px;display:block;">
       <div class="qr-label">Scan to open</div>
     </div>
   </div>
@@ -489,11 +497,7 @@
       const { ip, port } = await res.json();
       serverUrl = `http://${ip}:${port}`;
       document.getElementById('netUrl').textContent = serverUrl;
-      QRCode.toCanvas(document.getElementById('qrCanvas'), serverUrl, {
-        width: 100,
-        margin: 1,
-        color: { dark: '#00e5a0', light: '#16161b' }
-      });
+      // QR is served directly from /api/qr — no CDN needed
     } catch {
       document.getElementById('netUrl').textContent = 'Start the server first (node server.js)';
     }

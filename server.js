@@ -3,6 +3,7 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
+const QRCode = require("qrcode");
 
 const app = express();
 const PORT = 3000;
@@ -38,6 +39,22 @@ function getLocalIP() {
 // API: local IP
 app.get("/api/ip", (req, res) => {
   res.json({ ip: getLocalIP(), port: PORT });
+});
+
+// API: QR code as PNG
+app.get("/api/qr", async (req, res) => {
+  const url = `http://${getLocalIP()}:${PORT}`;
+  try {
+    const buffer = await QRCode.toBuffer(url, {
+      width: 200,
+      margin: 2,
+      color: { dark: '#00e5a0', light: '#16161b' }
+    });
+    res.setHeader('Content-Type', 'image/png');
+    res.send(buffer);
+  } catch (err) {
+    res.status(500).json({ error: 'QR generation failed' });
+  }
 });
 
 // API: list files
