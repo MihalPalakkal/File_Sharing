@@ -47,9 +47,15 @@
   .container {
     position: relative;
     z-index: 1;
-    max-width: 860px;
+    max-width: 1100px;
     margin: 0 auto;
     padding: 32px 20px 60px;
+  }
+  .main-layout {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 32px;
+    align-items: start;
   }
 
   /* Header */
@@ -419,7 +425,65 @@
   }
   .toast.show { transform: translateX(-50%) translateY(0); }
 
+  /* Chat UI */
+  .chat-window {
+    width: 100%; height: 500px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+    display: flex; flex-direction: column; overflow: hidden;
+    position: sticky; top: 32px;
+  }
+
+  .chat-header {
+    background: var(--card); padding: 14px 20px; border-bottom: 1px solid var(--border);
+    font-family: var(--font-display); font-weight: 600; font-size: 1rem;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .chat-close { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 1.2rem; }
+  .chat-close:hover { color: var(--text); }
+
+  .chat-messages {
+    flex: 1; padding: 14px; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .chat-msg {
+    background: var(--card); padding: 10px 14px; border-radius: 12px;
+    border-bottom-left-radius: 2px; font-size: 0.8rem;
+    max-width: 85%; align-self: flex-start; word-break: break-word;
+    display: flex; gap: 8px; align-items: flex-start;
+  }
+  .chat-msg.self {
+    background: var(--accent); color: var(--bg);
+    border-bottom-left-radius: 12px; border-bottom-right-radius: 2px; align-self: flex-end;
+  }
+  .chat-copy-btn {
+    background: none; border: none; color: var(--muted); cursor: pointer;
+    font-size: 0.75rem; opacity: 0; padding: 2px 0; transition: opacity 0.2s, color 0.2s;
+  }
+  .chat-msg:hover .chat-copy-btn { opacity: 1; }
+  .chat-copy-btn:hover { color: var(--accent); }
+  .chat-msg.self .chat-copy-btn { color: rgba(10, 10, 11, 0.4); }
+  .chat-msg.self .chat-copy-btn:hover { color: rgba(10, 10, 11, 0.8); }
+
+  .chat-input-area {
+    padding: 14px; border-top: 1px solid var(--border);
+    display: flex; gap: 8px; background: var(--card);
+  }
+  .chat-input {
+    flex: 1; background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 10px; border-radius: 8px; font-family: var(--font-mono); font-size: 0.8rem; outline: none;
+  }
+  .chat-input:focus { border-color: var(--accent); }
+  .chat-send {
+    background: var(--accent); color: var(--bg); border: none; border-radius: 8px;
+    padding: 0 14px; cursor: pointer; font-family: var(--font-display); font-weight: 600;
+  }
+
   /* Responsive */
+  @media (max-width: 900px) {
+    .main-layout { grid-template-columns: 1fr; }
+    .chat-window { position: static; height: 400px; margin-top: 20px; }
+  }
   @media (max-width: 580px) {
     .net-panel { grid-template-columns: 1fr; }
     .qr-box { flex-direction: row; }
@@ -443,6 +507,9 @@
       <div class="dot"></div> Server Active
     </div>
   </header>
+
+  <div class="main-layout">
+    <div class="left-col">
 
   <!-- Network info + QR -->
   <div class="net-panel">
@@ -482,11 +549,30 @@
     <div class="empty">No files yet — drop something above</div>
   </div>
 
+    </div>
+
+    <div class="right-col">
+      <div class="chat-window" id="chatWindow">
+        <div class="chat-header">
+          Network Chat
+        </div>
+        <div class="chat-messages" id="chatMessages">
+          <div style="font-size:0.7rem; color:var(--muted); text-align:center; padding-top:20px;">Welcome to the local chat!</div>
+        </div>
+        <form class="chat-input-area" id="chatForm">
+          <input type="text" class="chat-input" id="chatInput" placeholder="Message..." autocomplete="off">
+          <button type="submit" class="chat-send">Send</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
+<script src="/socket.io/socket.io.js"></script>
 <script>
   let serverUrl = '';
 
@@ -650,6 +736,80 @@
     t.classList.add('show');
     setTimeout(() => t.classList.remove('show'), 2500);
   }
+
+  // Notification Sound
+  let audioCtx;
+  function playNotificationSound() {
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      
+      const osc = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.1);
+      
+      gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+      
+      osc.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.1);
+    } catch(e) {}
+  }
+
+  // Socket.IO Chat
+  const socket = io();
+  const clientId = Math.random().toString(36).substring(7);
+
+  const chatForm = document.getElementById('chatForm');
+  const chatInput = document.getElementById('chatInput');
+  const chatMessages = document.getElementById('chatMessages');
+
+  chatForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const text = chatInput.value.trim();
+    if (text) {
+      socket.emit('chat message', { id: clientId, text: text });
+      chatInput.value = '';
+    }
+  });
+
+  socket.on('chat message', (data) => {
+    const el = document.createElement('div');
+    el.className = 'chat-msg' + (data.id === clientId ? ' self' : '');
+    
+    const content = document.createElement('div');
+    content.textContent = data.text;
+    content.style.flex = '1';
+    
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'chat-copy-btn';
+    copyBtn.innerHTML = '⎘';
+    copyBtn.title = 'Copy message';
+    copyBtn.onclick = () => {
+      navigator.clipboard.writeText(data.text);
+      copyBtn.innerHTML = '✓';
+      setTimeout(() => copyBtn.innerHTML = '⎘', 1500);
+    };
+    
+    el.appendChild(content);
+    el.appendChild(copyBtn);
+    
+    chatMessages.appendChild(el);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    
+    if (data.id !== clientId) {
+      playNotificationSound();
+      if (document.hidden) {
+        showToast('New message in chat');
+      }
+    }
+  });
 
   // Init
   initNetwork();

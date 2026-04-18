@@ -1,4 +1,6 @@
 const express = require("express");
+const http = require("http");
+const { Server } = require("socket.io");
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
@@ -6,6 +8,8 @@ const os = require("os");
 const QRCode = require("qrcode");
 
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server);
 const PORT = 3000;
 const UPLOAD_DIR = path.join(__dirname, "uploads");
 
@@ -93,7 +97,14 @@ app.delete("/api/delete/:filename", (req, res) => {
   res.json({ success: true });
 });
 
-app.listen(PORT, "0.0.0.0", () => {
+// Socket.IO Chat Events
+io.on("connection", (socket) => {
+  socket.on("chat message", (msg) => {
+    io.emit("chat message", msg);
+  });
+});
+
+server.listen(PORT, "0.0.0.0", () => {
   const ip = getLocalIP();
   console.log("\n╔══════════════════════════════════════╗");
   console.log("║       LOCAL FILE SHARE RUNNING       ║");
