@@ -17,8 +17,8 @@ title LocalDrop File Share Server
 cd /d "%~dp0Files"
 echo Starting LocalDrop Server...
 
-:: Schedule the browser to automatically open after 2 seconds
-start /b cmd /c "timeout /t 2 >nul & start http://localhost:3000"
+:: Schedule the browser to automatically open after 0 seconds
+start /b cmd /c "timeout /t 0 >nul & start http://localhost:3000"
 
 :: Start the Node.js server within the current window
 node server.js
